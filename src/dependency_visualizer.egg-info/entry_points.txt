@@ -1,0 +1,2 @@
+[console_scripts]
+depviz = dependency_visualizer.main:run_gui

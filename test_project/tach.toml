@@ -1,0 +1,26 @@
+# Auto-generated/Updated by Dependency Visualizer
+
+source_roots = ["."]
+
+exclude = [
+    "**/__pycache__/",
+    "**/.*/",
+    "build/",
+    "dist/",
+    "docs/",
+    "**/tests/",
+    "**/test/",
+    "**/test_*.py",
+    "**/*_test.py",
+    "*.egg-info/",
+    "venv/",
+    ".venv/",
+    "env/",
+    ".env/",
+    "**/venv/",
+    "**/.venv/",
+    "**/env/",
+    "**/.env/",
+    "site-packages/",
+    "**/site-packages/",
+]

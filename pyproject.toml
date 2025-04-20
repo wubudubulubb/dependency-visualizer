@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dependency-visualizer"
+version = "0.1.0"
+authors = [
+  { name="Emre Sezginalp", email="emre.sezginalp@gmail.com" }, 
+]
+description = "A tool to visualize Python project dependencies using Tach."
+readme = "README.md"
+long_description_content_type = "text/markdown" # Added for PyPI
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: GTK", 
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "tach",
+    "customtkinter",
+    "networkx",
+    "matplotlib",
+]
+# Add optional dependency for graphviz layout
+optional-dependencies = {
+    viz = ["pygraphviz"]
+}
+
+[project.scripts]
+depviz = "dependency_visualizer.main:run_gui"
+
+[project.urls]
+"Homepage" = "https://github.com/wubudubulubb/dependency-visualizer" 
+"Bug Tracker" = "https://github.com/wubudubulubb/dependency-visualizer/issues" 
