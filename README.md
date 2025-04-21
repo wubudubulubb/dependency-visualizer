@@ -3,7 +3,7 @@
 A tool to visualize Python package dependencies within a project using `tach` and `networkx`. It provides an interactive GUI built with CustomTkinter and Matplotlib.
 
 All of the project is vibe-coded as a first vibe-code trial. Initial commit, including most of this readme file is completely AI generated (tool: Cursor)
-![Dependency visualizer sample screenshot](images/sample_screenshot.png)
+![Dependency visualizer sample screenshot](images/sample_screenshot.PNG)
 
 ## Features
 
