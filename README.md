@@ -3,7 +3,7 @@
 A tool to visualize Python package dependencies within a project using `tach` and `networkx`. It provides an interactive GUI built with CustomTkinter and Matplotlib.
 
 All of the project is vibe-coded as a first vibe-code trial. Initial commit, including most of this readme file is completely AI generated (tool: Cursor)
-![Screenshot placeholder - replace with actual screenshot]
+![Dependency visualizer sample screenshot](images/sample_screenshot.png)
 
 ## Features
 
@@ -24,7 +24,7 @@ All of the project is vibe-coded as a first vibe-code trial. Initial commit, inc
 *   Python 3.8+
 *   [Tach](https://github.com/Polyconseil/tach)
 *   `customtkinter`, `networkx`, `matplotlib`
-*   (Optional but Recommended for better layout) `pygraphviz` (Requires system-level Graphviz installation first)
+*   (Optional) `pygraphviz` (Requires system-level Graphviz installation first)
 *   (For Docker usage) Docker installed and an X server available on the host.
 
 ## Installation
@@ -121,4 +121,4 @@ Then:
 
 ## License
 
-MIT License *(Assuming MIT - update if different)*
+MIT License 
