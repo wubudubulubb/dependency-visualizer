@@ -43,93 +43,137 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
     """Custom toolbar that ensures highlighting persists during pan/zoom."""
     def __init__(self, canvas, window, *, app, pack_toolbar=True):
         self.app = app
+        self.zooming = False  # Track zoom state
+        self.panning = False  # Track pan state
+        # Store view limits
+        self.view_limits = None
         super().__init__(canvas, window, pack_toolbar=pack_toolbar)
-
-    # REMOVE _update_view override
-    # def _update_view(self):
-    #     ...
 
     # --- Override specific action methods --- 
 
     def pan(self, *args):
         """Override pan action start/toggle."""
         print("CustomToolbar.pan() called")
+        self.panning = not self.panning  # Toggle panning state
+        if self.panning:
+            # Store current view limits when starting pan
+            self.view_limits = (self.app.ax.get_xlim(), self.app.ax.get_ylim())
         super().pan(*args)
 
     def zoom(self, *args):
         """Override zoom action start/toggle."""
         print("CustomToolbar.zoom() called")
+        self.zooming = not self.zooming  # Toggle zooming state
+        if self.zooming:
+            # Store current view limits when starting zoom
+            self.view_limits = (self.app.ax.get_xlim(), self.app.ax.get_ylim())
         super().zoom(*args)
 
     def release_pan(self, event):
         """Override pan action release (mouse button up)."""
         print("CustomToolbar.release_pan() called")
+        # Save current limits before they get reset
+        current_xlim = self.app.ax.get_xlim()
+        current_ylim = self.app.ax.get_ylim()
+        
+        # Let parent class handle the release
         super().release_pan(event)
         
-        # Store limits AFTER default pan finishes
-        xlim = self.app.ax.get_xlim()
-        ylim = self.app.ax.get_ylim()
-        print(f"  Stored limits after pan: x={xlim}, y={ylim}")
-        
-        print("  Redrawing graph after pan release...")
-        self.app.draw_graph(highlight_node=self.app.selected_node)
-        
-        # Reapply limits AFTER redraw
-        print(f"  Reapplying limits: x={xlim}, y={ylim}")
-        self.app.ax.set_xlim(xlim)
-        self.app.ax.set_ylim(ylim)
-        print("  Forcing final canvas draw...")
-        self.app.canvas.draw() # Force redraw with correct limits
+        if not self.panning:
+            # Only redraw when panning is complete (not during pan)
+            print("  Redrawing graph after pan release...")
+            
+            # Store current positions before redrawing
+            current_positions = self.app.node_positions.copy() if self.app.node_positions else None
+            
+            # Redraw with current highlighted node
+            self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
+            
+            # Restore node positions
+            if current_positions:
+                self.app.node_positions = current_positions
+            
+            # Restore limits after redraw
+            print(f"  Reapplying limits: x={current_xlim}, y={current_ylim}")
+            self.app.ax.set_xlim(current_xlim)
+            self.app.ax.set_ylim(current_ylim)
+            self.canvas.draw()  # Force canvas update with restored limits
 
     def release_zoom(self, event):
         """Override zoom action release (mouse button up after drawing zoom box)."""
         print("CustomToolbar.release_zoom() called")
+        # Save current limits before they get reset
+        current_xlim = self.app.ax.get_xlim()
+        current_ylim = self.app.ax.get_ylim()
+        
+        # Let parent class handle the release
         super().release_zoom(event)
-
-        # Store limits AFTER default zoom finishes
-        xlim = self.app.ax.get_xlim()
-        ylim = self.app.ax.get_ylim()
-        print(f"  Stored limits after zoom: x={xlim}, y={ylim}")
         
+        # Get the new limits resulting from the zoom action
+        new_xlim = self.app.ax.get_xlim()
+        new_ylim = self.app.ax.get_ylim()
+        
+        # Redraw with current highlighted node
         print("  Redrawing graph after zoom release...")
-        self.app.draw_graph(highlight_node=self.app.selected_node)
         
-        # Reapply limits AFTER redraw
-        print(f"  Reapplying limits: x={xlim}, y={ylim}")
-        self.app.ax.set_xlim(xlim)
-        self.app.ax.set_ylim(ylim)
-        print("  Forcing final canvas draw...")
-        self.app.canvas.draw() # Force redraw with correct limits
+        # Store current positions before redrawing
+        current_positions = self.app.node_positions.copy() if self.app.node_positions else None
+        
+        # Only redraw without resetting view
+        self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
+        
+        # Restore node positions
+        if current_positions:
+            self.app.node_positions = current_positions
+            
+        # Restore the new limits after the redraw
+        print(f"  Reapplying zoomed limits: x={new_xlim}, y={new_ylim}")
+        self.app.ax.set_xlim(new_xlim)
+        self.app.ax.set_ylim(new_ylim)
+        self.canvas.draw()  # Force canvas update with restored limits
 
     # Modify scroll_event override for mouse wheel zoom
     def scroll_event(self, event):
-        """Override scroll event to handle mouse wheel zoom with delayed redraw."""
+        """Override scroll event to handle mouse wheel zoom with preserved view."""
         print("CustomToolbar.scroll_event() called")
-        super().scroll_event(event) # Let the parent handle the actual zoom
-        # Schedule redraw AFTER the scroll/zoom operation might have finished processing
-        print("  Scheduling redraw after scroll event...")
+        
+        # Save current limits before scroll
+        current_xlim = self.app.ax.get_xlim()
+        current_ylim = self.app.ax.get_ylim()
+        
+        # Let the parent handle the actual zoom
+        super().scroll_event(event)
+        
+        # Get new limits after the scroll zoom
+        new_xlim = self.app.ax.get_xlim()
+        new_ylim = self.app.ax.get_ylim()
+        
         # Use the canvas's tk widget to access the .after method
-        # Keep the delay for scroll, as direct redraw + limit setting might still flicker
-        self.canvas.get_tk_widget().after(50, self._redraw_after_scroll) 
+        # Keep the delay for scroll to allow the event to complete
+        self.canvas.get_tk_widget().after(
+            50, 
+            lambda: self._redraw_after_scroll(new_xlim, new_ylim, current_positions=self.app.node_positions.copy())
+        ) 
 
-    # Add helper method for delayed redraw
-    def _redraw_after_scroll(self):
-        """Helper method to redraw the graph with highlights after a scroll event delay."""
+    # Update helper method for delayed redraw
+    def _redraw_after_scroll(self, xlim, ylim, current_positions=None):
+        """Helper method to redraw the graph with highlights while preserving zoom state."""
         print("CustomToolbar._redraw_after_scroll() executing")
         
-        # Store limits BEFORE redraw
-        xlim = self.app.ax.get_xlim()
-        ylim = self.app.ax.get_ylim()
-        print(f"  Stored limits before scroll redraw: x={xlim}, y={ylim}")
+        # Redraw while preserving view
+        self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
         
-        self.app.draw_graph(highlight_node=self.app.selected_node)
+        # Restore node positions if available
+        if current_positions:
+            self.app.node_positions = current_positions
         
-        # Reapply limits AFTER redraw
-        print(f"  Reapplying limits after scroll redraw: x={xlim}, y={ylim}")
+        # Apply the saved limits
+        print(f"  Applying saved limits after scroll: x={xlim}, y={ylim}")
         self.app.ax.set_xlim(xlim)
         self.app.ax.set_ylim(ylim)
-        print("  Forcing final canvas draw after scroll redraw...")
-        self.app.canvas.draw() # Force redraw with correct limits
+        
+        # Final force draw
+        self.canvas.draw()
 
 # --- Main App ---
 class DependencyVisualizerApp(ctk.CTk):
@@ -209,9 +253,14 @@ class DependencyVisualizerApp(ctk.CTk):
         self.graph_frame.grid_columnconfigure(0, weight=1)
         self.graph_frame.grid_rowconfigure(0, weight=1) # Allow canvas to expand
 
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.fig.subplots_adjust(left=0.01, right=0.99, top=0.97, bottom=0.01, wspace=0, hspace=0)
+        # Setup matplotlib figure with proper configuration for zooming and panning
+        self.fig = plt.figure(figsize=(8, 6))
+        self.ax = self.fig.add_subplot(111)
         
+        # Use tight layout instead of subplots_adjust
+        self.fig.set_tight_layout(True)
+        
+        # Create the canvas and add to the frame
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.graph_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.grid(row=0, column=0, sticky="nsew")
@@ -256,8 +305,14 @@ class DependencyVisualizerApp(ctk.CTk):
         self.history = []  # Save states for undo
 
         # --- Matplotlib Event Bindings ---
+        # Use only standard matplotlib events
         self.canvas.mpl_connect('button_press_event', self.on_click)
         self.canvas.mpl_connect('motion_notify_event', self.on_hover)
+        
+        # Variables to help detect double clicks manually
+        self._last_click_time = 0
+        self._last_click_event = None
+        self._double_click_threshold = 0.3  # seconds
         
         # Bind keyboard shortcuts
         self.bind('<Control-z>', self.undo_last_action)
@@ -442,12 +497,30 @@ Raw output:
         print(f"Building package graph from tach map data with {len(tach_data)} entries.")
         G = nx.DiGraph()
         package_dependencies = {} # Store { source_pkg: set(target_pkgs) }
+        
+        # Track different types of packages
+        project_packages = set()  # Internal project packages
+        external_packages = set() # External dependencies
 
         def get_package_from_filepath(filepath):
             """Converts a file path relative to source root to a package name."""
+            
+            # First, check if this is an external dependency from standard library or site-packages
             normalized_path = filepath.replace('\\', '/')
-            # Find the directory containing the file
+            
+            # Handle external/standard library imports by checking if the path exists
+            if not os.path.exists(os.path.join(self.project_root, normalized_path)):
+                # This is likely an external dependency
+                # Just extract the first part of the path to represent the external package
+                parts = normalized_path.split('/')
+                if parts and parts[0]:
+                    # Return the top-level package name with an "ext:" prefix to mark it as external
+                    return f"ext:{parts[0]}"
+                return None
+                
+            # Proceed with normal project package handling
             package_dir = os.path.dirname(normalized_path)
+            
             # Convert directory path to package name (dots)
             # If package_dir is empty, it means the file is in the root
             if not package_dir:
@@ -476,6 +549,12 @@ Raw output:
                 print(f"Warning: Could not determine package for source file '{source_file}'")
                 continue
 
+            # Check if this is an external package
+            if source_pkg.startswith("ext:"):
+                external_packages.add(source_pkg)
+            else:
+                project_packages.add(source_pkg)
+                
             all_packages.add(source_pkg)
             if source_pkg not in package_dependencies:
                 package_dependencies[source_pkg] = set()
@@ -483,6 +562,12 @@ Raw output:
             for target_file in target_files:
                 target_pkg = get_package_from_filepath(target_file)
                 if target_pkg:
+                    # Check if this is an external package
+                    if target_pkg.startswith("ext:"):
+                        external_packages.add(target_pkg)
+                    else:
+                        project_packages.add(target_pkg)
+                        
                     all_packages.add(target_pkg)
                     # Add dependency if it's a different package
                     if source_pkg != target_pkg:
@@ -492,11 +577,16 @@ Raw output:
 
         # Add nodes for all discovered packages
         for pkg_name in all_packages:
-             # Filter out potential non-package names derived from root files if needed
-             # This depends on the exact logic in get_package_from_filepath for root files
-             # For now, assume all entries in all_packages are valid node names
-            G.add_node(pkg_name)
+            # Add node attributes for visualization based on package type
+            if pkg_name.startswith("ext:"):
+                # External package - use different attributes
+                G.add_node(pkg_name, is_external=True)
+            else:
+                # Internal project package
+                G.add_node(pkg_name, is_external=False)
+                
         print(f"Added {len(all_packages)} package nodes: {sorted(list(all_packages))}")
+        print(f"External packages: {sorted(list(external_packages))}")
 
         # Add edges based on the aggregated package dependencies
         edge_count = 0
@@ -520,47 +610,159 @@ Raw output:
 
         return G
 
-    def draw_graph(self, highlight_node=None):
+    def draw_graph(self, highlight_node=None, preserve_view=False):
         """Draws the current graph state on the matplotlib canvas with customizations."""
         try:
-            if not self.graph: return # Removed _is_drawing flag assignment
-            dark_gray = '#505050'; self.ax.clear(); self.ax.set_facecolor(dark_gray); self.fig.set_facecolor(dark_gray); plt.axis('off')
-            if self.node_positions is None:
-                 try: self.node_positions = nx.spring_layout(self.graph, seed=42)
-                 except Exception as e: messagebox.showerror("Layout Error", f"Failed to calculate fallback layout: {e}"); return
+            if not self.graph: return 
+            
+            # Store current view limits if preserving view
+            if preserve_view:
+                current_xlim = self.ax.get_xlim()
+                current_ylim = self.ax.get_ylim()
+                
+            # Setup the plot appearance
+            dark_gray = '#505050'
+            self.ax.clear()
+            self.ax.set_facecolor(dark_gray)
+            self.fig.set_facecolor(dark_gray)
+            plt.axis('off')
+            
+            # Calculate layout if needed (avoid recalculating if preserving view)
+            if self.node_positions is None or not preserve_view:
+                try: 
+                    self.node_positions = nx.spring_layout(self.graph, seed=42)
+                except Exception as e: 
+                    messagebox.showerror("Layout Error", f"Failed to calculate fallback layout: {e}")
+                    return
+                    
+            # Prepare node labels and sizes
             truncated_labels = {node: truncate_label(node, max_segments=4) for node in self.graph.nodes()}
-            node_sizes = []; base_size = 1000; size_per_char = 100; min_size = 1000; max_size = 10000
+            node_sizes = []
+            base_size = 1000
+            size_per_char = 100
+            min_size = 1000
+            max_size = 10000
+            
             if self.graph.number_of_nodes() > 0:
                 try:
-                    for node in self.graph.nodes(): node_sizes.append(max(min_size, min(max_size, base_size + size_per_char * len(truncated_labels.get(node, ' ')))))
-                except Exception as e: node_sizes = [2500] * self.graph.number_of_nodes()
-            if len(node_sizes) != self.graph.number_of_nodes(): node_sizes = [2500] * self.graph.number_of_nodes()
-            default_node_color = '#1f78b4'; default_edge_color = 'black'; highlight_dep_color = 'red'; highlight_dee_color = 'blue'; selected_node_color = 'orange'
-            node_colors = {node: default_node_color for node in self.graph.nodes()}; edge_colors = {edge: default_edge_color for edge in self.graph.edges()}; edge_widths = {edge: 1.0 for edge in self.graph.edges()}
+                    for node in self.graph.nodes(): 
+                        node_sizes.append(max(min_size, min(max_size, base_size + size_per_char * len(truncated_labels.get(node, ' ')))))
+                except Exception as e: 
+                    node_sizes = [2500] * self.graph.number_of_nodes()
+                    
+            if len(node_sizes) != self.graph.number_of_nodes(): 
+                node_sizes = [2500] * self.graph.number_of_nodes()
+            
+            # Define colors
+            default_node_color = '#1f78b4'  # Regular project packages
+            external_node_color = '#7f007f'  # External dependencies
+            default_edge_color = 'black'
+            highlight_dep_color = 'red'
+            highlight_dee_color = 'blue'
+            selected_node_color = 'orange'
+            
+            # Set node colors based on node type
+            node_colors = {}
+            for node in self.graph.nodes():
+                if self.graph.nodes[node].get('is_external', False):
+                    node_colors[node] = external_node_color
+                else:
+                    node_colors[node] = default_node_color
+                    
+            edge_colors = {edge: default_edge_color for edge in self.graph.edges()}
+            edge_widths = {edge: 1.0 for edge in self.graph.edges()}
+            
+            # Handle highlighting
             if highlight_node and self.graph.has_node(highlight_node):
                 node_colors[highlight_node] = selected_node_color
-                for u, v in self.graph.out_edges(highlight_node): edge = (u, v); edge_colors[edge] = highlight_dep_color; edge_widths[edge] = 2.0; node_colors[v] = highlight_dep_color
-                for u, v in self.graph.in_edges(highlight_node): edge = (u, v); edge_colors[edge] = highlight_dee_color; edge_widths[edge] = 2.0; node_colors[u] = highlight_dee_color
-            nx.draw_networkx_edges(self.graph, self.node_positions, ax=self.ax, edge_color=[edge_colors.get(edge, default_edge_color) for edge in self.graph.edges()], width=[edge_widths.get(edge, 1.0) for edge in self.graph.edges()], arrowstyle='-|>', arrowsize=15, connectionstyle='arc3,rad=0.1', node_size=node_sizes)
-            nx.draw_networkx_nodes(self.graph, self.node_positions, ax=self.ax, node_size=node_sizes, node_color=[node_colors.get(node, default_node_color) for node in self.graph.nodes()], node_shape='o')
-            nx.draw_networkx_labels(self.graph, self.node_positions, labels=truncated_labels, ax=self.ax, font_size=8, font_color='white', font_weight='bold')
-            proj_name = os.path.basename(self.project_root) if self.project_root else 'N/A'; self.ax.set_title(f"Project: {proj_name}")
+                for u, v in self.graph.out_edges(highlight_node): 
+                    edge = (u, v)
+                    edge_colors[edge] = highlight_dep_color
+                    edge_widths[edge] = 2.0
+                    node_colors[v] = highlight_dep_color
+                for u, v in self.graph.in_edges(highlight_node): 
+                    edge = (u, v)
+                    edge_colors[edge] = highlight_dee_color
+                    edge_widths[edge] = 2.0
+                    node_colors[u] = highlight_dee_color
+            
+            # Draw the graph elements
+            nx.draw_networkx_edges(
+                self.graph, self.node_positions, ax=self.ax, 
+                edge_color=[edge_colors.get(edge, default_edge_color) for edge in self.graph.edges()], 
+                width=[edge_widths.get(edge, 1.0) for edge in self.graph.edges()], 
+                arrowstyle='-|>', arrowsize=15, connectionstyle='arc3,rad=0.1', 
+                node_size=node_sizes
+            )
+            
+            nx.draw_networkx_nodes(
+                self.graph, self.node_positions, ax=self.ax, 
+                node_size=node_sizes, 
+                node_color=[node_colors.get(node, default_node_color) for node in self.graph.nodes()], 
+                node_shape='o'
+            )
+            
+            # Customize node labels to indicate external packages
+            custom_labels = {}
+            for node in self.graph.nodes():
+                if node.startswith("ext:"):
+                    # For external packages, remove the prefix and show just the package name
+                    custom_labels[node] = truncate_label(node[4:], max_segments=2)  # Remove "ext:" prefix
+                else:
+                    custom_labels[node] = truncated_labels[node]
+                    
+            nx.draw_networkx_labels(
+                self.graph, self.node_positions, 
+                labels=custom_labels, ax=self.ax, 
+                font_size=8, font_color='white', font_weight='bold'
+            )
+            
+            # Set title
+            proj_name = os.path.basename(self.project_root) if self.project_root else 'N/A'
+            self.ax.set_title(f"Project: {proj_name}")
 
-            self.canvas.draw() # Ensure this is draw(), not draw_idle()
+            # Restore view limits if preserving view
+            if preserve_view:
+                self.ax.set_xlim(current_xlim)
+                self.ax.set_ylim(current_ylim)
+                
+            # Update the canvas
+            self.canvas.draw()
+            
         finally:
-             pass # Removed _is_drawing flag assignment
+            pass
 
     def on_click(self, event):
         """Handles single and double clicks, and right-click for delete."""
         if event.inaxes != self.ax or event.xdata is None or event.ydata is None:
             print("Click ignored (outside axes or null data)")
             return
+            
+        # Skip normal click processing if we're in zoom or pan mode
+        if hasattr(self.toolbar, 'mode') and self.toolbar.mode in ('zoom rect', 'pan/zoom'):
+            print(f"Click ignored (toolbar in {self.toolbar.mode} mode)")
+            return
 
         # Get the node under the cursor, if any
         clicked_node = self.find_node_at_pos(event.x, event.y)
         
-        # Check if this is a double-click (use Matplotlib's dblclick attribute)
-        is_double_click = hasattr(event, 'dblclick') and event.dblclick
+        # Manual double-click detection
+        current_time = time.time()
+        is_double_click = False
+        
+        if (current_time - self._last_click_time < self._double_click_threshold and 
+            self._last_click_event is not None and 
+            event.button == self._last_click_event.button and
+            abs(event.x - self._last_click_event.x) < 5 and 
+            abs(event.y - self._last_click_event.y) < 5):
+            is_double_click = True
+            # Reset time to prevent triple-click detection
+            self._last_click_time = 0
+            print("Double-click detected (manual detection)")
+        else:
+            # Store for next time
+            self._last_click_time = current_time
+            self._last_click_event = event
         
         # --- Right-Click Action (Button 3) --- 
         if event.button == 3:
@@ -577,25 +779,42 @@ Raw output:
             return
             
         # --- Single-Click Action (Button 1) --- 
-        elif event.button == 1:
+        elif event.button == 1 and not is_double_click:
             print(f"Left-click processing. Node: {clicked_node}")
             
-            if clicked_node:
-                # Toggle selection state
-                if self.selected_node == clicked_node:
-                    self.selected_node = None
-                    print(f"Node {clicked_node} deselected")
-                else:
-                    self.selected_node = clicked_node
-                    print(f"Selected node: {self.selected_node}")
-            else:
-                # Clicked background - deselect
-                if self.selected_node:
-                    self.selected_node = None
-                    print("Deselected node (clicked background)")
+            # Use a short delay to properly distinguish from double-clicks
+            # This helps prevent immediate selection followed by explosion on double-click
+            def delayed_single_click_action():
+                # Skip if this became a double-click during the delay
+                if time.time() - self._last_click_time > self._double_click_threshold:
+                    if clicked_node:
+                        # Toggle selection state
+                        if self.selected_node == clicked_node:
+                            self.selected_node = None
+                            print(f"Node {clicked_node} deselected")
+                        else:
+                            self.selected_node = clicked_node
+                            print(f"Selected node: {self.selected_node}")
+                    else:
+                        # Clicked background - deselect
+                        if self.selected_node:
+                            self.selected_node = None
+                            print("Deselected node (clicked background)")
+                    
+                    # Preserve the current view when redrawing after a click
+                    current_xlim = self.ax.get_xlim()
+                    current_ylim = self.ax.get_ylim()
+                    
+                    # Redraw with updated selection
+                    self.draw_graph(highlight_node=self.selected_node, preserve_view=True)
+                    
+                    # Restore view limits
+                    self.ax.set_xlim(current_xlim)
+                    self.ax.set_ylim(current_ylim)
+                    self.canvas.draw()
             
-            # Redraw with updated selection
-            self.draw_graph(highlight_node=self.selected_node)
+            # Schedule the delayed action
+            self.after(int(self._double_click_threshold * 1000), delayed_single_click_action)
 
     def handle_double_click(self, event):
         """Handles double-click events for node explosion."""
@@ -938,6 +1157,10 @@ def run_gui():
     """Initializes and runs the main Tkinter application loop."""
     print("--- run_gui() started ---")
     try:
+        # Ensure matplotlib is using the proper backend for tkinter
+        import matplotlib
+        matplotlib.use('TkAgg')  # Force TkAgg backend for better event handling
+        
         # Set appearance mode and color theme
         try:
             ctk.set_appearance_mode("System") # Default to system theme (light or dark)
