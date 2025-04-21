@@ -248,20 +248,19 @@ class DependencyVisualizerApp(ctk.CTk):
 
         # --- State Variables ---
         self.project_root = None
-        self.graph = None
-        self.node_positions = None
-        self.history = []
-        self.selected_node = None
-        self.hovered_node = None
-        # self.undo_tooltip_label defined above
-        self._last_click_time = 0
-        self._last_click_node = None
-        self._double_click_threshold = 0.3
+        self.tach_data = None
+        self.graph = None  # NetworkX graph
+        self.node_positions = None  # Layout positions
+        self.selected_node = None  # Current selected node
+        self.hovered_node = None  # Currently hovered node
+        self.history = []  # Save states for undo
 
-        # --- Bindings ---
+        # --- Matplotlib Event Bindings ---
         self.canvas.mpl_connect('button_press_event', self.on_click)
         self.canvas.mpl_connect('motion_notify_event', self.on_hover)
-        self.bind('<Control-z>', self.undo_last_action) # Renamed binding target
+        
+        # Bind keyboard shortcuts
+        self.bind('<Control-z>', self.undo_last_action)
 
     def find_python_packages(self, root_dir):
         """Finds directories containing __init__.py (potential packages) within root_dir.
@@ -554,84 +553,57 @@ Raw output:
     def on_click(self, event):
         """Handles single and double clicks, and right-click for delete."""
         if event.inaxes != self.ax or event.xdata is None or event.ydata is None:
-            self._last_click_time = 0
-            self._last_click_node = None
             print("Click ignored (outside axes or null data)")
             return
 
-        current_time = time.time()
+        # Get the node under the cursor, if any
         clicked_node = self.find_node_at_pos(event.x, event.y)
-
+        
+        # Check if this is a double-click (use Matplotlib's dblclick attribute)
+        is_double_click = hasattr(event, 'dblclick') and event.dblclick
+        
         # --- Right-Click Action (Button 3) --- 
         if event.button == 3:
             print(f"Right-click detected. Node: {clicked_node}")
             if clicked_node:
                 self.delete_node(clicked_node)
-            # Prevent further processing (like deselection) after right-click
-            return 
-
-        # --- Left-Click Action (Button 1) --- 
+            return
+            
+        # --- Double-Click Action (Button 1) --- 
+        elif event.button == 1 and is_double_click:
+            print(f"Double-click detected on {clicked_node}")
+            if clicked_node:
+                self.handle_double_click(event)
+            return
+            
+        # --- Single-Click Action (Button 1) --- 
         elif event.button == 1:
             print(f"Left-click processing. Node: {clicked_node}")
-            node_selected_or_deselected = False
+            
             if clicked_node:
+                # Toggle selection state
                 if self.selected_node == clicked_node:
-                    # Deselect if clicking the selected node again (unless it becomes a double-click)
                     self.selected_node = None
-                    node_selected_or_deselected = True
-                    print(f"Node {clicked_node} potentially deselected (pending double-click check)")
+                    print(f"Node {clicked_node} deselected")
                 else:
                     self.selected_node = clicked_node
-                    node_selected_or_deselected = True
                     print(f"Selected node: {self.selected_node}")
-                # Redraw immediately on single click selection/deselection
-                self.draw_graph(highlight_node=self.selected_node) 
             else:
-                # Clicked background - deselect immediately
+                # Clicked background - deselect
                 if self.selected_node:
                     self.selected_node = None
-                    node_selected_or_deselected = True
                     print("Deselected node (clicked background)")
-                    self.draw_graph(highlight_node=self.selected_node)
-                # Reset last click info if clicking background
-                self._last_click_time = 0
-                self._last_click_node = None
-                return # No further processing needed for background click
-
-            # --- Double Click Check (Only for left-clicks on nodes) ---
-            if clicked_node: # Only check double click if a node was clicked
-                time_diff = current_time - self._last_click_time
-                is_double_click = (
-                    time_diff < self._double_click_threshold and
-                    clicked_node == self._last_click_node # Must be the same node as last click
-                )
-
-                if is_double_click:
-                    print(f"Double click detected on {clicked_node}!")
-                    # Prevent single-click (de)selection from persisting if it was a double-click
-                    # Restore selection state if needed (though explode handles selection reset)
-                    self.handle_double_click(event) # Handle the explosion
-                    # Reset last click info after a double-click
-                    self._last_click_time = 0
-                    self._last_click_node = None
-                else:
-                    # Not a double click, store info for the *next* potential double click
-                    self._last_click_time = current_time
-                    self._last_click_node = clicked_node
-            else:
-                 # Reset last click info if background clicked
-                 self._last_click_time = 0
-                 self._last_click_node = None
-        # else: ignore other buttons? (e.g., middle mouse)
+            
+            # Redraw with updated selection
+            self.draw_graph(highlight_node=self.selected_node)
 
     def handle_double_click(self, event):
-         """Handles double-click events for node explosion."""
-         print(f"Handling double click based on event from on_click")
-         node_to_explode = self.find_node_at_pos(event.x, event.y)
-         if node_to_explode:
-             print(f"Attempting to explode node: {node_to_explode}")
-             self.explode_module(node_to_explode)
-
+        """Handles double-click events for node explosion."""
+        print(f"Handling double click based on event from on_click")
+        node_to_explode = self.find_node_at_pos(event.x, event.y)
+        if node_to_explode:
+            print(f"Attempting to explode node: {node_to_explode}")
+            self.explode_module(node_to_explode)
 
     def explode_module(self, node_id):
         """Expands a package node, adjusts layout, and redraws."""
@@ -963,34 +935,42 @@ Raw output:
 
 # --- Entry Point ---
 def run_gui():
-    """Creates and runs the main application."""
-    print("--- run_gui() started ---") # DEBUG
+    """Initializes and runs the main Tkinter application loop."""
+    print("--- run_gui() started ---")
     try:
-        # Set appearance mode (optional)
-        # ctk.set_appearance_mode("System") # Default
-        ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("blue") # Default
-        print("--- Appearance set ---") # DEBUG
+        # Set appearance mode and color theme
+        try:
+            ctk.set_appearance_mode("System") # Default to system theme (light or dark)
+        except Exception as e:
+            print(f"Warning: Could not set appearance mode 'System'. Falling back to 'Light'. Error: {e}", file=sys.stderr)
+            ctk.set_appearance_mode("Light") # Fallback
 
+        try:
+            ctk.set_default_color_theme("blue") # Default theme
+        except Exception as e:
+            print(f"Warning: Could not set color theme 'blue'. Using default. Error: {e}", file=sys.stderr)
+            # No explicit fallback needed, CustomTkinter handles it
+
+        print("--- Appearance set ---")
         app = DependencyVisualizerApp()
-        print("--- DependencyVisualizerApp initialized ---") # DEBUG
+        print("--- DependencyVisualizerApp initialized ---")
+
+        # --- Bind CTRL+Z to Undo ---
+        def handle_ctrl_z(event):
+            app.undo_last_action() # Call the app's undo method
+
+        app.bind_all("<Control-z>", handle_ctrl_z) # Bind globally
 
         app.mainloop()
-        print("--- mainloop finished ---") # DEBUG
-
     except Exception as e:
         print(f"--- !!! An error occurred during GUI startup: {e} !!! ---", file=sys.stderr)
         import traceback
-        traceback.print_exc() # Print detailed traceback
-        # Optionally show an error dialog if tkinter itself didn't fail
+        traceback.print_exc()
         try:
-            root = ctk.CTk() # Try to create a minimal window for error
-            root.withdraw() # Hide the main window
-            messagebox.showerror("Fatal Error", f"Failed to start the application:\n\n{e}")
-            root.destroy()
-        except Exception as e2:
-             print(f"--- Could not even show error dialog: {e2} ---", file=sys.stderr)
-
+            messagebox.showerror("Startup Error", f"An error occurred during application startup:\n\n{e}")
+        except Exception as dialog_error:
+            print(f"--- Could not even show error dialog: {dialog_error} ---", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    run_gui() 
+    run_gui() # Allows running directly via python src/dependency_visualizer/main.py 

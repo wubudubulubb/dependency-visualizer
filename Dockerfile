@@ -30,12 +30,19 @@ RUN pip install --no-cache-dir .
 RUN echo '#!/bin/bash\n\
 echo "=== Starting depviz with debug logging ==="\n\
 echo "DISPLAY=$DISPLAY"\n\
+echo "Python version:"\n\
+python --version\n\
+echo "Matplotlib version:"\n\
+python -c "import matplotlib; print(matplotlib.__version__)"\n\
 echo "Mount contents of /mnt/d:"\n\
 ls -la /mnt/d 2>&1 | head -n 10\n\
 echo "=== Running depviz ==="\n\
 depviz "$@" 2>&1\n\
 EXIT_CODE=$?\n\
 echo "=== depviz exited with code $EXIT_CODE ==="\n\
+if [ $EXIT_CODE -ne 0 ]; then\n\
+  echo "Error occurred. If related to matplotlib events, check your Python and Matplotlib versions."\n\
+fi\n\
 ' > /app/debug_wrapper.sh && \
 chmod +x /app/debug_wrapper.sh
 

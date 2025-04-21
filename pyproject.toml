@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A tool to visualize Python project dependencies using Tach."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -22,10 +22,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "tach",
-    "customtkinter",
-    "networkx",
-    "matplotlib",
+    "tach>=0.5.0",
+    "customtkinter>=5.2.0",
+    "networkx>=3.1",
+    "matplotlib>=3.7.2",
 ]
 # Add optional dependency for graphviz layout
 # optional-dependencies = {

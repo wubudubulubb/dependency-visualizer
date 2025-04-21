@@ -21,7 +21,7 @@ All of the project is vibe-coded as a first vibe-code trial. Initial commit, inc
 
 ## Requirements
 
-*   Python 3.8+
+*   Python 3.11+
 *   [Tach](https://github.com/Polyconseil/tach)
 *   `customtkinter`, `networkx`, `matplotlib`
 *   (Optional) `pygraphviz` (Requires system-level Graphviz installation first)
