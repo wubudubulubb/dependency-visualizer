@@ -1,4 +1,0 @@
-tach
-customtkinter
-networkx
-matplotlib

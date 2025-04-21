@@ -10,7 +10,6 @@ authors = [
 ]
 description = "A tool to visualize Python project dependencies using Tach."
 readme = "README.md"
-long_description_content_type = "text/markdown" # Added for PyPI
 requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -29,9 +28,9 @@ dependencies = [
     "matplotlib",
 ]
 # Add optional dependency for graphviz layout
-optional-dependencies = {
-    viz = ["pygraphviz"]
-}
+# optional-dependencies = {
+#     viz = ["pygraphviz"]
+# }
 
 [project.scripts]
 depviz = "dependency_visualizer.main:run_gui"

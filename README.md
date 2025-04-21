@@ -59,6 +59,10 @@ pip install dependency-visualizer[viz]
 
 ## Usage
 
+**Important Note on Project Root Selection:**
+
+When using "Select Project Root", choose the directory that *directly* contains your main Python package(s) or the `src` directory if you are using a src-layout project structure. The tool currently expects to find the source code within the selected directory (or its immediate `src` subdirectory) and does not automatically scan deeper subdirectories for projects.
+
 ### After PyPI Installation
 
 Simply run the command in your terminal:
@@ -110,7 +114,7 @@ python src/dependency_visualizer/main.py
 
 Then:
 
-1.  Click "Select Project Root" to choose your Python project directory.
+1.  Click "Select Project Root" to choose your Python project directory (**See Important Note above**).
 2.  Optionally adjust the "Exclude Patterns".
 3.  Click "Load / Refresh" to generate and display the graph.
 4.  Interact with the graph using the mouse actions described in Features.

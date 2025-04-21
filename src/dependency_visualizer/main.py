@@ -324,14 +324,19 @@ class DependencyVisualizerApp(ctk.CTk):
 
         tach_config_path = os.path.join(self.project_root, "tach.toml")
 
-        # --- 1. Get Exclude Patterns from UI --- (Get this *before* potentially writing the file)
+        # --- 1. Get Exclude Patterns from UI --- 
         exclude_text = self.exclude_textbox.get("1.0", "end-1c")
         user_exclude_patterns = [line.strip() for line in exclude_text.splitlines() if line.strip()]
-        # Format for TOML array
-        # Ensure backslashes in patterns are escaped for TOML strings if needed, though usually not required for globs
-        exclude_toml_list_str = "\n".join([f'    "{p.replace("\\", "\\\\")}",' for p in user_exclude_patterns])
+        
+        # Format for TOML array - Avoid backslash in f-string expression for < Py3.12
+        exclude_toml_lines = []
+        for p in user_exclude_patterns:
+            # Escape backslashes if needed for TOML strings
+            escaped_p = p.replace('\\', '\\\\') 
+            exclude_toml_lines.append(f'    "{escaped_p}",')
+        exclude_toml_list_str = "\n".join(exclude_toml_lines)
+        
         print(f"Using exclude patterns from UI: {user_exclude_patterns}")
-
 
         # --- 2. Check for/Create or Update Tach Configuration ---
         # Always write/overwrite tach.toml to ensure current excludes are used
