@@ -23,7 +23,7 @@ All of the project is vibe-coded as a first vibe-code trial. Initial commit, inc
 
 *   Python 3.11+
 *   [Tach](https://github.com/Polyconseil/tach)
-*   `customtkinter`, `networkx`, `matplotlib`
+*   `customtkinter`, `networkx`, `matplotlib`, `scipy`
 *   (Optional) `pygraphviz` (Requires system-level Graphviz installation first)
 *   (For Docker usage) Docker installed and an X server available on the host.
 

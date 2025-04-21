@@ -1,14 +1,20 @@
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
-import subprocess
+import os
+import re
+import sys
 import json
-import networkx as nx
+import math
+import time
+import textwrap # For potential wrapping if needed
+import subprocess
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, simpledialog, messagebox
+import matplotlib
+matplotlib.use('TkAgg')  # This must come before pyplot import
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-import os
-import sys
-import time
-import textwrap # For potential future wrapping if needed
+import networkx as nx
+import customtkinter as ctk
 try:
     from customtkinter import CTkToolTip # Try standard first
 except ImportError:
@@ -28,6 +34,16 @@ except ImportError:
     PYGRAPHVIZ_INSTALLED = False
     print("\n[Warning] pygraphviz not found. Graph layout will fallback to spring_layout.")
     print("          Install Graphviz system libraries and then run: pip install .[viz]\n")
+
+# Check for scipy availability (needed for spring_layout)
+SCIPY_INSTALLED = False
+try:
+    import scipy
+    SCIPY_INSTALLED = True
+except ImportError:
+    print("\n[ERROR] scipy not found but it is a required dependency.")
+    print("        Please ensure the package was installed correctly: pip install dependency-visualizer\n")
+    print("        The application will use fallback layout algorithms but optimal visualization requires scipy.\n")
 
 def truncate_label(label, max_segments=4, join_char='.'):
     """Truncates a label like 'a.b.c.d' to 'a...c.d' if it has max_segments or more."""
@@ -629,11 +645,29 @@ Raw output:
             
             # Calculate layout if needed (avoid recalculating if preserving view)
             if self.node_positions is None or not preserve_view:
-                try: 
-                    self.node_positions = nx.spring_layout(self.graph, seed=42)
+                try:
+                    # Try pygraphviz first if installed
+                    if PYGRAPHVIZ_INSTALLED:
+                        self.node_positions = nx_agraph.graphviz_layout(self.graph, prog='dot')
+                    else:
+                        # Fall back to spring_layout with scipy
+                        if SCIPY_INSTALLED:
+                            # Safely try to use spring_layout which depends on scipy
+                            self.node_positions = nx.spring_layout(self.graph, seed=42)
+                        else:
+                            # Simple fallback if scipy is not available - use circular layout
+                            print("Using circular_layout as fallback due to missing scipy dependency")
+                            self.node_positions = nx.circular_layout(self.graph)
+                        
                 except Exception as e: 
-                    messagebox.showerror("Layout Error", f"Failed to calculate fallback layout: {e}")
-                    return
+                    print(f"Failed to calculate initial layout: {e}")
+                    try:
+                        # Last resort - use shell layout or circular layout which don't need scipy
+                        print("Attempting circular_layout as last resort")
+                        self.node_positions = nx.circular_layout(self.graph)
+                    except Exception as e2:
+                        messagebox.showerror("Layout Error", f"Failed to calculate any layout: {e2}")
+                        return
                     
             # Prepare node labels and sizes
             truncated_labels = {node: truncate_label(node, max_segments=4) for node in self.graph.nodes()}
@@ -927,9 +961,25 @@ Raw output:
         if self.graph.number_of_nodes() > 1:
             try:
                 print("Adjusting layout after explosion...")
-                # Calculate k for optimal distance
-                k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
-                self.node_positions = nx.spring_layout(self.graph, pos=new_positions, k=k, iterations=30, seed=42)
+                # Use scipy if available, otherwise use alternatives
+                if SCIPY_INSTALLED:
+                    # Calculate k for optimal distance
+                    k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
+                    self.node_positions = nx.spring_layout(self.graph, pos=new_positions, k=k, iterations=30, seed=42)
+                else:
+                    # Use a simpler layout algorithm like circular that doesn't require scipy
+                    print("Using circular_layout for node explosion (scipy not available)")
+                    temp_pos = nx.circular_layout(self.graph)
+                    # Blend with existing positions for a smoother transition
+                    for node in self.graph.nodes():
+                        if node in new_positions:
+                            # Keep 50% of the original position and 50% of the new position
+                            x1, y1 = new_positions[node]
+                            x2, y2 = temp_pos[node]
+                            new_positions[node] = (0.5*x1 + 0.5*x2, 0.5*y1 + 0.5*y2)
+                        else:
+                            new_positions[node] = temp_pos[node]
+                    self.node_positions = new_positions
                 print("Layout adjustment complete.")
             except Exception as e_layout:
                 print(f"Error during layout adjustment: {e_layout}. Using previous positions.")
@@ -985,21 +1035,27 @@ Raw output:
         # Adjust layout based on restored state
         if self.graph and restored_positions and self.graph.number_of_nodes() > 1:
             try:
-                 print("Adjusting layout after undo...")
-                 k = 0.8 / (self.graph.number_of_nodes()**0.5)
-                 self.node_positions = nx.spring_layout(self.graph, pos=restored_positions, k=k, iterations=30, seed=42)
-                 print("Layout adjustment complete.")
+                print("Adjusting layout after undo...")
+                # Use scipy if available, otherwise use alternatives
+                if SCIPY_INSTALLED:
+                    k = 0.8 / (self.graph.number_of_nodes()**0.5)
+                    self.node_positions = nx.spring_layout(self.graph, pos=restored_positions, k=k, iterations=30, seed=42)
+                else:
+                    # Just use the restored positions directly
+                    print("Using restored positions directly (scipy not available)")
+                    self.node_positions = restored_positions
+                print("Layout adjustment complete.")
             except Exception as e_layout:
-                 print(f"Error during layout adjustment: {e_layout}. Using restored positions directly.")
-                 self.node_positions = restored_positions 
+                print(f"Error during layout adjustment: {e_layout}. Using restored positions directly.")
+                self.node_positions = restored_positions 
         else:
-             self.node_positions = restored_positions 
+            self.node_positions = restored_positions 
 
 
         if not self.history:
-             self.undo_button.configure(state="disabled")
+            self.undo_button.configure(state="disabled")
         else: # Ensure it's enabled if history still exists
-             self.undo_button.configure(state="normal")
+            self.undo_button.configure(state="normal")
 
         print(f"Restored graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
         self.draw_graph()
@@ -1059,21 +1115,44 @@ Raw output:
                 # Calculate initial layout here
                 print("Calculating initial graph layout...")
                 try:
+                    # First try: Use pygraphviz if available
                     if PYGRAPHVIZ_INSTALLED:
                         try:
                             self.node_positions = nx_agraph.graphviz_layout(self.graph, prog='dot')
                             print("Initial layout complete (using pygraphviz dot).")
                         except Exception as e_gv:
-                            print(f"Initial pygraphviz failed: {e_gv}. Falling back.")
-                            self.node_positions = nx.spring_layout(self.graph, seed=42)
-                            print("Initial layout complete (spring fallback).")
+                            print(f"Initial pygraphviz failed: {e_gv}. Falling back to spring_layout.")
+                            if SCIPY_INSTALLED:
+                                # Second try: Use spring_layout with networkx (requires scipy)
+                                self.node_positions = nx.spring_layout(self.graph, seed=42)
+                                print("Initial layout complete (spring_layout fallback).")
+                            else:
+                                # Use circular layout if scipy not available
+                                print("Using circular_layout (scipy not available)")
+                                self.node_positions = nx.circular_layout(self.graph)
+                                print("Initial layout complete (circular_layout fallback).")
                     else:
-                        self.node_positions = nx.spring_layout(self.graph, seed=42)
-                        print("Initial layout complete (spring - pygraphviz not installed).")
+                        if SCIPY_INSTALLED:
+                            # For no pygraphviz: Try spring_layout first (requires scipy)
+                            self.node_positions = nx.spring_layout(self.graph, seed=42)
+                            print("Initial layout complete (spring_layout - pygraphviz not installed).")
+                        else:
+                            # Use circular layout if scipy not available
+                            print("Using circular_layout (scipy not available)")
+                            self.node_positions = nx.circular_layout(self.graph)
+                            print("Initial layout complete (circular_layout fallback).")
                 except Exception as e_layout:
-                     messagebox.showerror("Layout Error", f"Failed to calculate initial layout: {e_layout}")
-                     self.graph = None # Invalidate graph if layout fails
-                     return
+                    print(f"All layout algorithms failed: {e_layout}. Using manual layout.")
+                    # Final fallback: manual layout
+                    try:
+                        self.node_positions = self._generate_manual_layout()
+                        print("Using manually generated layout as last resort.")
+                    except Exception as e_manual:
+                        messagebox.showerror("Layout Error", 
+                            f"Failed to calculate any layout: {e_manual}\n\n"
+                            "This might be due to missing dependencies or an extremely large graph.")
+                        self.graph = None # Invalidate graph if layout fails
+                        return
 
                 # Draw the graph with the calculated positions
                 self.draw_graph()
@@ -1090,6 +1169,31 @@ Raw output:
             self.ax.clear()
             self.ax.text(0.5, 0.5, "Failed to load data from tach", ha='center', va='center')
             self.canvas.draw_idle()
+            
+    def _generate_manual_layout(self):
+        """Generate a simple manual layout as a last resort when all algorithms fail."""
+        if not self.graph:
+            return {}
+            
+        positions = {}
+        nodes = list(self.graph.nodes())
+        
+        # Generate a simple circular layout manually
+        num_nodes = len(nodes)
+        if num_nodes == 0:
+            return positions
+            
+        radius = 1.0
+        center_x, center_y = 0.5, 0.5
+        
+        for i, node in enumerate(nodes):
+            # Calculate position on a circle
+            angle = 2.0 * math.pi * i / num_nodes
+            x = center_x + radius * math.cos(angle)
+            y = center_y + radius * math.sin(angle)
+            positions[node] = (x, y)
+            
+        return positions
 
     # --- Add on_hover Method --- 
     def on_hover(self, event):

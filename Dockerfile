@@ -26,6 +26,9 @@ RUN dos2unix pyproject.toml || true # Continue if dos2unix isn't needed/fails
 # The '.' tells pip to look for pyproject.toml in the current directory
 RUN pip install --no-cache-dir .
 
+# Install additional dependencies not declared in pyproject.toml
+RUN pip install --no-cache-dir pygraphviz pydot
+
 # Create a debug wrapper script
 RUN echo '#!/bin/bash\n\
 echo "=== Starting depviz with debug logging ==="\n\
