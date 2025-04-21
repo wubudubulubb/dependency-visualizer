@@ -511,6 +511,7 @@ Raw output:
         # Track different types of packages
         project_packages = set()  # Internal project packages
         external_packages = set() # External dependencies
+        top_level_packages = set()  # Store top-level packages only
 
         def get_package_from_filepath(filepath):
             """Converts a file path relative to source root to a package name."""
@@ -551,8 +552,21 @@ Raw output:
             package_name = package_dir.replace('/', '.')
             return package_name
 
+        def get_top_level_package(package_name):
+            """Extract the top-level package name from a dotted package path."""
+            if package_name.startswith("ext:"):
+                return package_name  # External dependencies remain as-is
+            
+            # For internal packages, get the first component
+            parts = package_name.split('.')
+            if parts:
+                return parts[0]
+            return package_name
+
         all_packages = set()
-        # Iterate through the map to determine package dependencies
+        # First pass: collect all packages and their dependencies
+        detailed_package_dependencies = {}  # Full dependency details before collapsing
+        
         for source_file, target_files in tach_data.items():
             source_pkg = get_package_from_filepath(source_file)
             if not source_pkg:
@@ -566,8 +580,8 @@ Raw output:
                 project_packages.add(source_pkg)
                 
             all_packages.add(source_pkg)
-            if source_pkg not in package_dependencies:
-                package_dependencies[source_pkg] = set()
+            if source_pkg not in detailed_package_dependencies:
+                detailed_package_dependencies[source_pkg] = set()
 
             for target_file in target_files:
                 target_pkg = get_package_from_filepath(target_file)
@@ -581,12 +595,34 @@ Raw output:
                     all_packages.add(target_pkg)
                     # Add dependency if it's a different package
                     if source_pkg != target_pkg:
-                        package_dependencies[source_pkg].add(target_pkg)
+                        detailed_package_dependencies[source_pkg].add(target_pkg)
                 else:
                      print(f"Warning: Could not determine package for target file '{target_file}'")
 
-        # Add nodes for all discovered packages
-        for pkg_name in all_packages:
+        # Second pass: collapse sub-packages to top-level packages
+        for pkg in all_packages:
+            top_pkg = get_top_level_package(pkg)
+            top_level_packages.add(top_pkg)
+            
+            # Add to package_dependencies if not already there
+            if top_pkg not in package_dependencies:
+                package_dependencies[top_pkg] = set()
+                
+        # Aggregate dependencies at top level
+        for source_pkg, targets in detailed_package_dependencies.items():
+            top_source = get_top_level_package(source_pkg)
+            
+            for target_pkg in targets:
+                top_target = get_top_level_package(target_pkg)
+                
+                # Only add dependency if top-level packages are different
+                if top_source != top_target:
+                    package_dependencies[top_source].add(top_target)
+        
+        print(f"Collapsed to {len(top_level_packages)} top-level packages: {sorted(list(top_level_packages))}")
+
+        # Add nodes for all top-level packages
+        for pkg_name in top_level_packages:
             # Add node attributes for visualization based on package type
             if pkg_name.startswith("ext:"):
                 # External package - use different attributes
@@ -595,10 +631,11 @@ Raw output:
                 # Internal project package
                 G.add_node(pkg_name, is_external=False)
                 
-        print(f"Added {len(all_packages)} package nodes: {sorted(list(all_packages))}")
-        print(f"External packages: {sorted(list(external_packages))}")
+        print(f"Added {len(top_level_packages)} package nodes")
+        external_top_pkgs = [p for p in top_level_packages if p.startswith("ext:")]
+        print(f"External packages: {sorted(external_top_pkgs)}")
 
-        # Add edges based on the aggregated package dependencies
+        # Add edges based on the aggregated top-level package dependencies
         edge_count = 0
         for source_pkg, target_pkgs in package_dependencies.items():
             if G.has_node(source_pkg):
@@ -610,7 +647,6 @@ Raw output:
                            print(f"Warning: Skipping edge to missing target package node '{target_pkg}'")
             else:
                  print(f"Warning: Skipping edges from missing source package node '{source_pkg}'")
-
 
         print(f"Package graph built with {G.number_of_nodes()} nodes and {edge_count} edges.")
         # Check for nodes with no connections (might indicate issues or be leaves/roots)
@@ -861,7 +897,17 @@ Raw output:
             self.explode_module(node_to_explode)
 
     def explode_module(self, node_id):
-        """Expands a package node, adjusts layout, and redraws."""
+        """Expands a package node to show its immediate children only (one level).
+        
+        This method will:
+        1. Find all direct children (subpackages and modules) of the given node
+        2. Replace the node with these children in the graph
+        3. Rewire all edges appropriately
+        4. Adjust the layout to accommodate the new nodes
+        
+        It explicitly does NOT recursively explode all descendants - only direct children
+        are shown in the explosion.
+        """
         # Ensure we have the project root and the node exists
         # Using self.tach_project_root which is set in run_tach after finding tach.toml
         if not hasattr(self, 'tach_project_root') or not self.tach_project_root:
@@ -873,7 +919,7 @@ Raw output:
 
         print(f"Exploding package: {node_id}")
 
-        # --- 1. Find submodules/subpackages --- (Now operates on packages)
+        # --- 1. Find immediate submodules/subpackages (direct children only) ---
         package_path_parts = node_id.split('.')
         potential_dir = os.path.join(self.tach_project_root, *package_path_parts)
 
@@ -888,6 +934,7 @@ Raw output:
 
         children = [] # Store tuples of (child_name, child_type)
         try:
+            # Only list immediate children - no recursive traversal
             for item in os.listdir(potential_dir):
                 item_path = os.path.join(potential_dir, item)
                 # Check if it's a directory containing __init__.py (sub-package)
@@ -913,7 +960,7 @@ Raw output:
             messagebox.showinfo("No Children", f"No sub-packages or sub-modules found within '{node_id}'.")
             return
 
-        print(f"Found children for {node_id}: {children}")
+        print(f"Found {len(children)} direct children for {node_id}: {children}")
 
         # --- 2. Modify Graph --- (Simplified edge rewiring)
         self._save_history() # Save state *before* modification
