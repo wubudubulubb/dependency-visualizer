@@ -69,81 +69,52 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
 
     def pan(self, *args):
         """Override pan action start/toggle."""
-        print("CustomToolbar.pan() called")
         self.panning = not self.panning  # Toggle panning state
         if self.panning:
-            # Store current view limits when starting pan
             self.view_limits = (self.app.ax.get_xlim(), self.app.ax.get_ylim())
         super().pan(*args)
 
     def zoom(self, *args):
         """Override zoom action start/toggle."""
-        print("CustomToolbar.zoom() called")
         self.zooming = not self.zooming  # Toggle zooming state
         if self.zooming:
-            # Store current view limits when starting zoom
             self.view_limits = (self.app.ax.get_xlim(), self.app.ax.get_ylim())
         super().zoom(*args)
 
     def release_pan(self, event):
         """Override pan action release (mouse button up)."""
-        print("CustomToolbar.release_pan() called")
-        # Save current limits before they get reset
         current_xlim = self.app.ax.get_xlim()
         current_ylim = self.app.ax.get_ylim()
         
-        # Let parent class handle the release
         super().release_pan(event)
         
         if not self.panning:
-            # Only redraw when panning is complete (not during pan)
-            print("  Redrawing graph after pan release...")
-            
-            # Store current positions before redrawing
             current_positions = self.app.node_positions.copy() if self.app.node_positions else None
-            
-            # Redraw with current highlighted node
             self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
             
-            # Restore node positions
             if current_positions:
                 self.app.node_positions = current_positions
             
-            # Restore limits after redraw
-            print(f"  Reapplying limits: x={current_xlim}, y={current_ylim}")
             self.app.ax.set_xlim(current_xlim)
             self.app.ax.set_ylim(current_ylim)
             self.canvas.draw()  # Force canvas update with restored limits
 
     def release_zoom(self, event):
         """Override zoom action release (mouse button up after drawing zoom box)."""
-        print("CustomToolbar.release_zoom() called")
-        # Save current limits before they get reset
         current_xlim = self.app.ax.get_xlim()
         current_ylim = self.app.ax.get_ylim()
         
-        # Let parent class handle the release
         super().release_zoom(event)
         
-        # Get the new limits resulting from the zoom action
         new_xlim = self.app.ax.get_xlim()
         new_ylim = self.app.ax.get_ylim()
         
-        # Redraw with current highlighted node
-        print("  Redrawing graph after zoom release...")
-        
-        # Store current positions before redrawing
         current_positions = self.app.node_positions.copy() if self.app.node_positions else None
-        
-        # Only redraw without resetting view
         self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
         
-        # Restore node positions
         if current_positions:
             self.app.node_positions = current_positions
             
-        # Restore the new limits after the redraw
-        print(f"  Reapplying zoomed limits: x={new_xlim}, y={new_ylim}")
         self.app.ax.set_xlim(new_xlim)
         self.app.ax.set_ylim(new_ylim)
         self.canvas.draw()  # Force canvas update with restored limits
@@ -151,21 +122,14 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
     # Modify scroll_event override for mouse wheel zoom
     def scroll_event(self, event):
         """Override scroll event to handle mouse wheel zoom with preserved view."""
-        print("CustomToolbar.scroll_event() called")
-        
-        # Save current limits before scroll
         current_xlim = self.app.ax.get_xlim()
         current_ylim = self.app.ax.get_ylim()
         
-        # Let the parent handle the actual zoom
         super().scroll_event(event)
         
-        # Get new limits after the scroll zoom
         new_xlim = self.app.ax.get_xlim()
         new_ylim = self.app.ax.get_ylim()
         
-        # Use the canvas's tk widget to access the .after method
-        # Keep the delay for scroll to allow the event to complete
         self.canvas.get_tk_widget().after(
             50, 
             lambda: self._redraw_after_scroll(new_xlim, new_ylim, current_positions=self.app.node_positions.copy())
@@ -174,21 +138,14 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
     # Update helper method for delayed redraw
     def _redraw_after_scroll(self, xlim, ylim, current_positions=None):
         """Helper method to redraw the graph with highlights while preserving zoom state."""
-        print("CustomToolbar._redraw_after_scroll() executing")
-        
-        # Redraw while preserving view
         self.app.draw_graph(highlight_node=self.app.selected_node, preserve_view=True)
         
-        # Restore node positions if available
         if current_positions:
             self.app.node_positions = current_positions
         
-        # Apply the saved limits
-        print(f"  Applying saved limits after scroll: x={xlim}, y={ylim}")
-        self.app.ax.set_xlim(xlim)
-        self.app.ax.set_ylim(ylim)
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
         
-        # Final force draw
         self.canvas.draw()
 
 # --- Main App ---
@@ -333,6 +290,9 @@ class DependencyVisualizerApp(ctk.CTk):
         # Bind keyboard shortcuts
         self.bind('<Control-z>', self.undo_last_action)
 
+        # --- Bind window close event --- 
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
     def find_python_packages(self, root_dir):
         """Finds directories containing __init__.py (potential packages) within root_dir.
 
@@ -410,42 +370,42 @@ class DependencyVisualizerApp(ctk.CTk):
 
         # --- 2. Check for/Create or Update Tach Configuration ---
         # Always write/overwrite tach.toml to ensure current excludes are used
-        # If the user had manual changes, they might be lost - a potential improvement point
-        print(f"Writing/Updating {tach_config_path} with current exclude patterns.")
-        try:
-            # Detect Source Root (same logic as before)
-            potential_src_dir = os.path.join(self.project_root, "src")
-            if os.path.isdir(potential_src_dir) and any(item.endswith('.py') or os.path.isdir(os.path.join(potential_src_dir, item)) for item in os.listdir(potential_src_dir)):
-                source_root = "src"
-                print("  Using 'src' directory as source root.")
-            else:
-                source_root = "."
-                print("  Using project root '.' as source root.")
+        # print(f"Writing/Updating {tach_config_path} with current exclude patterns.")
+        
+        # Initialize source_roots list
+        source_roots = ["."] # Always include the project root
 
-            # Generate config content using UI exclude patterns
-            config_content = f"""# Auto-generated/Updated by Dependency Visualizer
+        # Check if src directory exists and add it if it does
+        src_dir_path = os.path.join(self.project_root, "src")
+        if os.path.isdir(src_dir_path):
+             source_roots.append("src")
 
-source_roots = ["{source_root}"]
+        config = {
+            "modules": [], # Start with empty modules list; we'll define source roots
+            "source_roots": source_roots, # Use the determined source roots
+            "force_package_roots": ["."] # Treat project root as package regardless of __init__.py
+        }
+
+        # Add excludes if any exist
+        if user_exclude_patterns: # Use the local variable read from the UI
+             config["exclude"] = user_exclude_patterns # Use the local variable
+
+        # Generate config content using UI exclude patterns
+        config_content = f"""# Auto-generated/Updated by Dependency Visualizer
+
+source_roots = ["{source_roots[0]}"]
 
 exclude = [
 {exclude_toml_list_str}
 ]
 """
-            print("--- Generated/Updated tach.toml Content ---")
-            print(config_content)
-            print("-----------------------------------------")
-            # Write the config file (overwrite if exists)
-            with open(tach_config_path, "w", encoding="utf-8") as f:
-                f.write(config_content)
-            print(f"  Successfully wrote {tach_config_path}")
-        except OSError as e:
-             messagebox.showerror("Error", f"Failed to write 'tach.toml' in {self.project_root}:\n{e}")
-             print(f"Error writing tach.toml: {e}")
-             return None
-        except Exception as e:
-             messagebox.showerror("Error", f"An unexpected error occurred during config writing: {e}")
-             print(f"Unexpected error writing tach.toml: {e}")
-             return None
+        print("--- Generated/Updated tach.toml Content ---")
+        print(config_content)
+        print("-----------------------------------------")
+        # Write the config file (overwrite if exists)
+        with open(tach_config_path, "w", encoding="utf-8") as f:
+            f.write(config_content)
+        print(f"  Successfully wrote {tach_config_path}")
 
         # --- 3. Run Tach from the selected project root dir ---
         command = [sys.executable, "-m", "tach", "map"]
@@ -805,236 +765,275 @@ Raw output:
     def on_click(self, event):
         """Handles single and double clicks, and right-click for delete."""
         if event.inaxes != self.ax or event.xdata is None or event.ydata is None:
-            print("Click ignored (outside axes or null data)")
             return
             
         # Skip normal click processing if we're in zoom or pan mode
         if hasattr(self.toolbar, 'mode') and self.toolbar.mode in ('zoom rect', 'pan/zoom'):
-            print(f"Click ignored (toolbar in {self.toolbar.mode} mode)")
             return
 
-        # Get the node under the cursor, if any
         clicked_node = self.find_node_at_pos(event.x, event.y)
         
         # Manual double-click detection
         current_time = time.time()
         is_double_click = False
-        
-        if (current_time - self._last_click_time < self._double_click_threshold and 
-            self._last_click_event is not None and 
+
+        if (current_time - self._last_click_time < self._double_click_threshold and
+            self._last_click_event is not None and
             event.button == self._last_click_event.button and
-            abs(event.x - self._last_click_event.x) < 5 and 
+            abs(event.x - self._last_click_event.x) < 5 and
             abs(event.y - self._last_click_event.y) < 5):
             is_double_click = True
-            # Reset time to prevent triple-click detection
-            self._last_click_time = 0
-            print("Double-click detected (manual detection)")
+            self._last_click_time = 0 # Reset time
+            print("DEBUG: Double-click detected (manual detection)") # Re-enable print
         else:
-            # Store for next time
             self._last_click_time = current_time
             self._last_click_event = event
-        
-        # --- Right-Click Action (Button 3) --- 
-        if event.button == 3:
-            print(f"Right-click detected. Node: {clicked_node}")
+
+        # --- Right-Click Action (Button 3) ---
+        if event.button == 3: # Restore original 'if'
+            # print(f"Right-click detected. Node: {clicked_node}")
             if clicked_node:
                 self.delete_node(clicked_node)
             return
-            
-        # --- Double-Click Action (Button 1) --- 
+
+        # --- Double-Click Action (Button 1) ---
         elif event.button == 1 and is_double_click:
-            print(f"Double-click detected on {clicked_node}")
+            print(f"DEBUG: Double-click detected on node: {clicked_node}") # Re-enable print
             if clicked_node:
                 self.handle_double_click(event)
             return
-            
-        # --- Single-Click Action (Button 1) --- 
+
+        # --- Single-Click Action (Button 1) ---
         elif event.button == 1 and not is_double_click:
-            print(f"Left-click processing. Node: {clicked_node}")
-            
-            # Use a short delay to properly distinguish from double-clicks
-            # This helps prevent immediate selection followed by explosion on double-click
+             # print(f"Left-click processing. Node: {clicked_node}")
             def delayed_single_click_action():
-                # Skip if this became a double-click during the delay
                 if time.time() - self._last_click_time > self._double_click_threshold:
                     if clicked_node:
-                        # Toggle selection state
                         if self.selected_node == clicked_node:
                             self.selected_node = None
-                            print(f"Node {clicked_node} deselected")
                         else:
                             self.selected_node = clicked_node
-                            print(f"Selected node: {self.selected_node}")
                     else:
-                        # Clicked background - deselect
                         if self.selected_node:
                             self.selected_node = None
-                            print("Deselected node (clicked background)")
                     
-                    # Preserve the current view when redrawing after a click
                     current_xlim = self.ax.get_xlim()
                     current_ylim = self.ax.get_ylim()
                     
-                    # Redraw with updated selection
                     self.draw_graph(highlight_node=self.selected_node, preserve_view=True)
                     
-                    # Restore view limits
                     self.ax.set_xlim(current_xlim)
                     self.ax.set_ylim(current_ylim)
                     self.canvas.draw()
             
-            # Schedule the delayed action
             self.after(int(self._double_click_threshold * 1000), delayed_single_click_action)
 
     def handle_double_click(self, event):
         """Handles double-click events for node explosion."""
-        print(f"Handling double click based on event from on_click")
+        print(f"DEBUG: Handling double click...") # Re-enable print
         node_to_explode = self.find_node_at_pos(event.x, event.y)
         if node_to_explode:
-            print(f"Attempting to explode node: {node_to_explode}")
+            print(f"DEBUG: Attempting to explode node: {node_to_explode}") # Re-enable print
             self.explode_module(node_to_explode)
+        else:
+            print(f"DEBUG: No node found at double-click position.") # Add else print
 
     def explode_module(self, node_id):
-        """Expands a package node to show its immediate children only (one level).
-        
-        This method will:
-        1. Find all direct children (subpackages and modules) of the given node
-        2. Replace the node with these children in the graph
-        3. Rewire all edges appropriately
-        4. Adjust the layout to accommodate the new nodes
-        
-        It explicitly does NOT recursively explode all descendants - only direct children
-        are shown in the explosion.
+        """Expands a package/directory node to show its immediate children,
+        rewiring edges based on detailed file-level dependencies from tach_data.
         """
-        # Ensure we have the project root and the node exists
-        # Using self.tach_project_root which is set in run_tach after finding tach.toml
+        # --- Prerequisites ---
         if not hasattr(self, 'tach_project_root') or not self.tach_project_root:
-             messagebox.showerror("Error", "Tach project root not determined.")
-             return
+            messagebox.showerror("Error", "Tach project root not determined. Cannot explode.")
+            return
         if not self.graph or not self.graph.has_node(node_id):
-             messagebox.showerror("Error", f"Node '{node_id}' not found in graph.")
-             return
+            messagebox.showerror("Error", f"Node '{node_id}' not found in graph.")
+            return
+        if not hasattr(self, 'tach_data') or not self.tach_data:
+             messagebox.showerror("Error", "Tach data not available. Cannot accurately explode node.")
+             return # Need tach_data for accurate rewiring
 
-        print(f"Exploding package: {node_id}")
+        print(f"Exploding package/directory: {node_id}")
 
-        # --- 1. Find immediate submodules/subpackages (direct children only) ---
-        package_path_parts = node_id.split('.')
-        potential_dir = os.path.join(self.tach_project_root, *package_path_parts)
+        # --- 1. Find immediate children (submodules/subpackages/scripts) ---
+        # Use '.' for the root node if node_id is '.'
+        relative_node_path = node_id if node_id != '.' else ''
+        potential_dir = os.path.join(self.tach_project_root, relative_node_path.replace('.', os.sep))
 
-        if not os.path.isdir(potential_dir):
-            # This shouldn't happen if the node represents a package discovered earlier
-            # But handle file case just in case get_package_from_filepath produced a file node somehow
-            print(f"Warning: Node '{node_id}' does not correspond to a directory: {potential_dir}. Cannot explode.")
-            # Maybe check if node_id corresponds to a file path from the original map?
-            # For now, just show info and return.
-            messagebox.showinfo("Cannot Explode", f"Node '{node_id}' does not map to a known directory.")
+        # If node_id is 'ext:something', we cannot explode further
+        if node_id.startswith("ext:"):
+            messagebox.showinfo("Cannot Explode", f"External package node '{node_id}' cannot be exploded.")
             return
 
-        children = [] # Store tuples of (child_name, child_type)
+        # Check if it's a directory or represents one
+        is_directory_like = False
+        if os.path.isdir(potential_dir):
+             is_directory_like = True
+        elif node_id == '.': # Root is always directory-like
+             is_directory_like = True
+        # Add more checks if node names might represent files directly in some cases
+
+        if not is_directory_like:
+             # This node might represent a single module/script already
+             print(f"Node '{node_id}' does not appear to be a directory: {potential_dir}. Assuming it's already exploded.")
+             messagebox.showinfo("Cannot Explode", f"Node '{node_id}' does not seem to be a package or directory that can be exploded further.")
+             return
+
+        children_details = {} # Store { child_node_id: child_file_path }
         try:
-            # Only list immediate children - no recursive traversal
             for item in os.listdir(potential_dir):
-                item_path = os.path.join(potential_dir, item)
-                # Check if it's a directory containing __init__.py (sub-package)
-                # or a .py file (sub-module)
-                is_pkg = os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, '__init__.py'))
-                is_module = os.path.isfile(item_path) and item.endswith('.py') and item != '__init__.py'
+                item_path_abs = os.path.join(potential_dir, item)
+                # item_path_rel = os.path.relpath(item_path_abs, self.tach_project_root).replace('\\\\', '/') # Old way
+
+                # --- Use pathlib for robust relative path and name derivation ---
+                try:
+                    p_rel = Path(item_path_abs).relative_to(self.tach_project_root)
+                    normalized_rel_path = p_rel.as_posix() # Path with forward slashes
+                except ValueError as e:
+                    print(f"  Warning: Could not get relative path for {item_path_abs}: {e}")
+                    continue # Skip this item
 
                 child_id = None
-                if is_pkg:
-                    child_id = f"{node_id}.{item}"
-                    children.append((child_id, 'package'))
-                elif is_module:
-                    module_name = os.path.splitext(item)[0]
-                    child_id = f"{node_id}.{module_name}"
-                    children.append((child_id, 'module'))
+                representative_file_path = None
+                # Check if it's a directory containing __init__.py (sub-package)
+                if os.path.isdir(item_path_abs) and os.path.exists(os.path.join(item_path_abs, '__init__.py')):
+                    # Node name is the dot-separated directory path
+                    child_id = normalized_rel_path.replace('/', '.') # e.g., 'pkg_b.sub_b'
+                    # Store the path to the __init__.py as the representative file
+                    representative_file_path = (p_rel / '__init__.py').as_posix()
+
+                # Check if it's a .py file (sub-module/script)
+                elif os.path.isfile(item_path_abs) and item.endswith('.py') and item != '__init__.py':
+                    # Node name is dot-separated path excluding extension
+                    base_path = os.path.splitext(normalized_rel_path)[0] # e.g., 'pkg_b/sub_b/logic_b'
+                    child_id = base_path.replace('/', '.') # e.g., 'pkg_b.sub_b.logic_b'
+                    representative_file_path = normalized_rel_path # Store the .py file path
+
+                # --- Store child details if found ---
+                if child_id and representative_file_path:
+                     children_details[child_id] = representative_file_path
 
         except OSError as e:
              messagebox.showerror("Error", f"Error accessing sub-items for '{node_id}': {e}")
              return
 
-        if not children:
-            print(f"No sub-packages or sub-modules found for {node_id}")
-            messagebox.showinfo("No Children", f"No sub-packages or sub-modules found within '{node_id}'.")
+        if not children_details:
+            print(f"No children (sub-packages or modules/scripts) found for {node_id}")
+            messagebox.showinfo("No Children", f"No sub-packages or modules/scripts found within '{node_id}' to explode.")
             return
 
-        print(f"Found {len(children)} direct children for {node_id}: {children}")
+        print(f"Found {len(children_details)} direct children for {node_id}: {list(children_details.keys())}")
 
-        # --- 2. Modify Graph --- (Simplified edge rewiring)
+        # --- 2. Modify Graph ---
         self._save_history() # Save state *before* modification
 
         new_graph = self.graph.copy()
         new_positions = self.node_positions.copy() if self.node_positions else {}
 
-        # Store original node info
+        # Store original node info & remove original node
         original_pos = new_positions.pop(node_id, None)
-        in_edges = list(new_graph.in_edges(node_id))
-        out_edges = list(new_graph.out_edges(node_id))
+        if new_graph.has_node(node_id):
+             new_graph.remove_node(node_id)
+        else:
+             print(f"Warning: Node {node_id} to explode was already removed?")
+
 
         # Add new nodes for children & estimate initial positions
-        child_nodes = [child_id for child_id, child_type in children]
+        child_nodes = list(children_details.keys())
         for child_id in child_nodes:
              if not new_graph.has_node(child_id):
-                 new_graph.add_node(child_id)
+                 new_graph.add_node(child_id, is_external=False)
                  if original_pos is not None:
+                      # Simple offset logic for initial placement
                       offset_x = (hash(child_id) % 200 - 100) / 1000.0
                       offset_y = (hash(child_id) % 100 - 50) / 1000.0
                       new_positions[child_id] = (original_pos[0] + offset_x, original_pos[1] + offset_y)
                  else:
-                      # Assign a default position if parent had none (shouldn't happen ideally)
-                      new_positions[child_id] = (0.5, 0.5) # Center fallback
+                      new_positions[child_id] = (0.5, 0.5) # Fallback position
              else:
-                 print(f"Warning: Child node {child_id} already exists?")
+                 print(f"Warning: Child node {child_id} already exists in graph?")
 
-        # Rewire edges (Simplified)
-        for u, _ in in_edges:
-             if u != node_id:
-                 for child_id in child_nodes:
-                     if new_graph.has_node(u) and new_graph.has_node(child_id):
-                         new_graph.add_edge(u, child_id)
+        # --- DEBUG: Print graph nodes before edge rebuild ---
+        print(f"DEBUG: Nodes in graph before edge rebuild: {sorted(list(new_graph.nodes()))}")
+        # --- END DEBUG ---
 
-        for _, v in out_edges:
-             if v != node_id:
-                 for child_id in child_nodes:
-                      if new_graph.has_node(child_id) and new_graph.has_node(v):
-                         new_graph.add_edge(child_id, v)
+        # --- 3. Rebuild Edges based on tach_data ---
+        print("Rebuilding edges based on tach_data...")
+        added_edges = set()
+        for source_filepath, target_filepaths in self.tach_data.items():
+            # Map source filepath to a node in the *new* graph state
+            source_node = self._map_filepath_to_graph_node(source_filepath, new_graph)
+            # --- DEBUG START ---
+            # print(f"Processing source: {source_filepath} -> Mapped Node: {source_node}")
+            # --- DEBUG END ---
 
-        # Remove the original node
-        new_graph.remove_node(node_id)
+            if source_node:
+                for target_filepath in target_filepaths:
+                    # Map target filepath to a node in the *new* graph state
+                    target_node = self._map_filepath_to_graph_node(target_filepath, new_graph)
+                    # --- DEBUG START ---
+                    mapped_edge_info = f"  Target: {target_filepath} -> Mapped Node: {target_node}"
+                    # --- DEBUG END ---
+
+                    if target_node and source_node != target_node:
+                        # Add edge if both nodes exist in the new graph and are different
+                        edge = (source_node, target_node)
+                        if edge not in added_edges:
+                             # --- DEBUG START ---
+                             print(f"DEBUG: Adding Edge | {mapped_edge_info} | Result: {source_node} -> {target_node}")
+                             # --- DEBUG END ---
+                             new_graph.add_edge(source_node, target_node)
+                             added_edges.add(edge)
+                             # print(f"  Added edge: {source_node} -> {target_node} (from {source_filepath} -> {target_filepath})")
+                    # --- DEBUG START ---
+                    # else:
+                         # Optional: Print why edge wasn't added
+                         # reason = ""
+                         # if not target_node: reason = "Target node not found in graph."
+                         # elif source_node == target_node: reason = "Source and target map to same node."
+                         # print(f"DEBUG: Skipping Edge | {mapped_edge_info} | Reason: {reason}")
+                    # --- DEBUG END ---
+
 
         self.graph = new_graph
 
-        # --- 3. Adjust Layout --- (Run spring layout initialized with current positions)
+        # --- 4. Adjust Layout ---
+        # (Layout logic remains similar, using new_positions as initial state)
         if self.graph.number_of_nodes() > 1:
             try:
                 print("Adjusting layout after explosion...")
-                # Use scipy if available, otherwise use alternatives
-                if SCIPY_INSTALLED:
-                    # Calculate k for optimal distance
+                current_positions_for_layout = {n: p for n, p in new_positions.items() if n in self.graph}
+
+                if PYGRAPHVIZ_INSTALLED:
+                     # If using graphviz, maybe just recalculate dot?
+                     # Or does spring layout work better after explosion? Let's stick to spring for consistency post-explosion.
+                     print("Using spring_layout for post-explosion adjustment (PyGraphviz available but spring preferred here)")
+                     if SCIPY_INSTALLED:
+                         k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
+                         self.node_positions = nx.spring_layout(self.graph, pos=current_positions_for_layout, k=k, iterations=30, seed=42)
+                     else:
+                         print("Falling back to circular layout post-explosion (scipy not available)")
+                         self.node_positions = nx.circular_layout(self.graph) # Less ideal adjustment
+
+                elif SCIPY_INSTALLED:
                     k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
-                    self.node_positions = nx.spring_layout(self.graph, pos=new_positions, k=k, iterations=30, seed=42)
+                    self.node_positions = nx.spring_layout(self.graph, pos=current_positions_for_layout, k=k, iterations=30, seed=42)
                 else:
-                    # Use a simpler layout algorithm like circular that doesn't require scipy
-                    print("Using circular_layout for node explosion (scipy not available)")
-                    temp_pos = nx.circular_layout(self.graph)
-                    # Blend with existing positions for a smoother transition
-                    for node in self.graph.nodes():
-                        if node in new_positions:
-                            # Keep 50% of the original position and 50% of the new position
-                            x1, y1 = new_positions[node]
-                            x2, y2 = temp_pos[node]
-                            new_positions[node] = (0.5*x1 + 0.5*x2, 0.5*y1 + 0.5*y2)
-                        else:
-                            new_positions[node] = temp_pos[node]
-                    self.node_positions = new_positions
+                    print("Using circular_layout for post-explosion adjustment (scipy not available)")
+                    # Simple circular layout if no better option
+                    self.node_positions = nx.circular_layout(self.graph)
+
                 print("Layout adjustment complete.")
             except Exception as e_layout:
-                print(f"Error during layout adjustment: {e_layout}. Using previous positions.")
-                self.node_positions = new_positions # Fallback to non-adjusted positions
+                print(f"Error during layout adjustment: {e_layout}. Using estimated positions.")
+                # Fallback to the initially estimated positions if layout fails
+                self.node_positions = {n: p for n, p in new_positions.items() if n in self.graph}
         else:
-            self.node_positions = new_positions # Use directly if only 0 or 1 node
+            self.node_positions = {n: p for n, p in new_positions.items() if n in self.graph} # Use directly if only 0 or 1 node
 
-        self.selected_node = None
+
+        # --- 5. Finalize and Redraw ---
+        self.selected_node = None # Clear selection after explosion
         self.undo_button.configure(state="normal")
 
         print(f"Exploded {node_id}. New graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
@@ -1139,10 +1138,10 @@ Raw output:
         # For now, use a generous pixel distance threshold
         click_tolerance_pixels_sq = 30**2
         if min_dist_sq < click_tolerance_pixels_sq:
-             print(f"Click near node: {closest_node}")
+             print(f"DEBUG: Click near node: {closest_node}") # Re-enable print
              return closest_node
         else:
-             print(f"Click not close enough to any node (min_dist_sq={min_dist_sq:.2f})")
+             # print(f"Click not close enough to any node (min_dist_sq={min_dist_sq:.2f})")
              return None
 
     def load_dependencies(self):
@@ -1154,10 +1153,12 @@ Raw output:
         self.selected_node = None
         self.history = []
         self.undo_button.configure(state="disabled")
+        self.tach_data = None # Explicitly clear previous data
 
         tach_data = self.run_tach()
         if tach_data:
-            self.graph = self.build_graph_from_tach(tach_data) # Changed to assign to self.graph
+            self.tach_data = tach_data # Assign the data to the instance variable
+            self.graph = self.build_graph_from_tach(self.tach_data) # Use the instance variable
             if self.graph:
                 # Calculate initial layout here
                 print("Calculating initial graph layout...")
@@ -1257,36 +1258,27 @@ Raw output:
                     # Use event coordinates but invert Y relative to canvas height
                     tooltip_x = event.x + 15
                     try:
-                        # Get canvas height for Y inversion
                         canvas_height = self.canvas_widget.winfo_height()
-                        if canvas_height <= 1: # Check for invalid height initially
-                             print("Warning: Canvas height not yet available for tooltip placement.")
-                             tooltip_y = event.y + 10 # Fallback to previous simple placement
+                        if canvas_height <= 1:
+                             tooltip_y = event.y + 10
                         else:
-                             tooltip_y = canvas_height - event.y + 10 # Invert Y, offset below cursor
+                             tooltip_y = canvas_height - event.y + 10
                     except Exception as e:
-                         print(f"Error getting canvas height: {e}")
-                         tooltip_y = event.y + 10 # Fallback
-                                        
+                         tooltip_y = event.y + 10
                     self.tooltip_label.place(x=tooltip_x, y=tooltip_y)
-                    # Update debug print if needed
-                    print(f"Hover IN: {self.hovered_node} at canvas coords ({tooltip_x:.0f}, {tooltip_y:.0f}) using canvas_height={canvas_height if 'canvas_height' in locals() else 'N/A'}") # Debug
             else:
                 if self.hovered_node is not None:
-                    print(f"Hover OUT: {self.hovered_node}") # Debug
                     self.hovered_node = None
                     self.tooltip_label.place_forget()
         else:
             if self.hovered_node is not None:
-                print(f"Hover OUTSIDE AXES: {self.hovered_node}") # Debug
                 self.hovered_node = None
                 self.tooltip_label.place_forget()
 
     # --- Rename Deflate Button Tooltip Handlers --- 
     def show_undo_tooltip(self, event=None):
         """Shows the tooltip for the undo button."""
-        self.undo_tooltip_label.configure(text="Undo (CTRL+Z)") # Updated text
-        # Position relative to the undo button
+        self.undo_tooltip_label.configure(text="Undo (CTRL+Z)")
         button_x = self.undo_button.winfo_x()
         button_y = self.undo_button.winfo_y()
         button_height = self.undo_button.winfo_height()
@@ -1295,12 +1287,119 @@ Raw output:
         tooltip_y = button_y + button_height + 5 
         
         self.undo_tooltip_label.place(x=tooltip_x, y=tooltip_y)
-        print("Show undo tooltip") # Debug
 
     def hide_undo_tooltip(self, event=None):
         """Hides the tooltip for the undo button."""
         self.undo_tooltip_label.place_forget()
-        print("Hide undo tooltip") # Debug
+
+    # --- Add Helper Function for Filepath to Node Mapping ---
+    def _map_filepath_to_graph_node(self, filepath, graph):
+        """Maps a file path (relative to project root) to its corresponding node
+           in the *current* graph state.
+
+        Args:
+            filepath: The relative file path (e.g., 'pkg_a/module_a.py').
+            graph: The networkx graph instance to check against.
+
+        Returns:
+            The name of the node in the graph representing this filepath,
+            or None if no corresponding node exists in the current graph state.
+        """
+        print(f"_map_filepath_to_graph_node: Trying to map '{filepath}'")
+        if not filepath or not graph:
+            return None
+
+        # --- Robust Normalization and Dot Conversion ---
+        try:
+            # 1. Normalize separators to POSIX style first
+            normalized_path = Path(filepath).as_posix()
+
+            # 2. Handle __init__.py separately to get parent dir path
+            if normalized_path.endswith('/__init__.py'):
+                # Get parent dir, could be empty for root __init__.py
+                path_base = os.path.dirname(normalized_path)
+                # Convert slashes to dots, handle root case
+                potential_node = path_base.replace('/', '.') if path_base else '.'
+            else:
+                # For other files, remove .py extension if present
+                path_base = os.path.splitext(normalized_path)[0]
+                # Convert slashes to dots
+                potential_node = path_base.replace('/', '.')
+
+        except TypeError as e:
+             print(f"  ERROR: Could not process filepath '{filepath}' with Pathlib: {e}")
+             return None
+
+        # --- External Check (moved after potential_node derivation) ---
+        if not os.path.exists(os.path.join(self.tach_project_root, filepath)):
+            parts = potential_node.split('.') # Use dot-separated name now
+            if parts and parts[0]:
+                 external_node_candidate = f"ext:{parts[0]}"
+                 print(f"  Potential Node (External Check on '{potential_node}'): {external_node_candidate}")
+                 if graph.has_node(external_node_candidate):
+                      print(f"  FOUND (External): {external_node_candidate}")
+                      return external_node_candidate
+                 print(f"  NOT FOUND (External): {external_node_candidate}")
+                 return None
+            else:
+                 print(f"  Cannot determine external package from: {potential_node}")
+                 return None
+
+        # --- Internal Node Check ---
+        print(f"  Potential Node (Internal): {potential_node}")
+
+        # 2. Check if the exact potential node name exists in the graph
+        if graph.has_node(potential_node):
+            print(f"  FOUND (Exact Internal): {potential_node}")
+            return potential_node
+
+        # 3. If exact match not found, try finding the parent package/directory node
+        parts = potential_node.split('.')
+        for i in range(len(parts) - 1, 0, -1):
+             parent_node_name = '.'.join(parts[:i])
+             # --- DEBUG START ---
+             print(f"    Checking parent: {parent_node_name}") # Ensure this is uncommented
+             # --- DEBUG END ---
+             if graph.has_node(parent_node_name):
+                 # --- DEBUG START ---
+                 print(f"    FOUND (Parent Match): {parent_node_name}") # Ensure this is uncommented
+                 # --- DEBUG END ---
+                 return parent_node_name
+
+        # 4. Check if it belongs to the root node (if '.' node exists)
+        # --- DEBUG START ---
+        print(f"    Checking for root node '.' mapping...") # Ensure this is uncommented
+        # --- DEBUG END ---
+        if graph.has_node('.'):
+            if '/' not in normalized_path and '\\\\' not in normalized_path:
+                   # --- DEBUG START ---
+                   print(f"    FOUND (Root Match): '.'") # Ensure this is uncommented
+                   # --- DEBUG END ---
+                   return '.'
+
+        # --- DEBUG START ---
+        print(f"  Mapping FAILED for '{filepath}'. Returning None.") # Ensure this is uncommented
+        # --- DEBUG END ---
+        return None
+
+    # --- Add the on_closing method ---
+    def on_closing(self):
+        """Handles the event when the window is closed by the user."""
+        print("Window close requested. Cleaning up and exiting...")
+        try:
+            # Ensure matplotlib figure is closed if exists
+            if hasattr(self, 'fig') and self.fig:
+                 plt.close(self.fig)
+            # Quit the Tkinter main loop
+            self.quit()
+            # Destroy the main window and widgets
+            self.destroy()
+            print("Application closed successfully.")
+        except Exception as e:
+            print(f"Error during closing sequence: {e}")
+            # Optionally force exit if standard cleanup fails
+            # import sys
+            # sys.exit(1)
 
 
 # --- Entry Point ---
