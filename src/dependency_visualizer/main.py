@@ -597,9 +597,9 @@ Raw output:
                 # Internal project package
                 G.add_node(pkg_name, is_external=False)
                 
-        print(f"Added {len(top_level_packages)} package nodes")
-        external_top_pkgs = [p for p in top_level_packages if p.startswith("ext:")]
-        print(f"External packages: {sorted(external_top_pkgs)}")
+        #print(f"Added {len(top_level_packages)} package nodes")
+        #external_top_pkgs = [p for p in top_level_packages if p.startswith("ext:")]
+        #print(f"External packages: {sorted(external_top_pkgs)}")
 
         # Add edges based on the aggregated top-level package dependencies
         edge_count = 0
@@ -784,7 +784,7 @@ Raw output:
             abs(event.y - self._last_click_event.y) < 5):
             is_double_click = True
             self._last_click_time = 0 # Reset time
-            print("DEBUG: Double-click detected (manual detection)") # Re-enable print
+            #print("DEBUG: Double-click detected (manual detection)") # Re-enable print
         else:
             self._last_click_time = current_time
             self._last_click_event = event
@@ -798,7 +798,7 @@ Raw output:
 
         # --- Double-Click Action (Button 1) ---
         elif event.button == 1 and is_double_click:
-            print(f"DEBUG: Double-click detected on node: {clicked_node}") # Re-enable print
+            #print(f"DEBUG: Double-click detected on node: {clicked_node}") # Re-enable print
             if clicked_node:
                 self.handle_double_click(event)
             return
@@ -830,13 +830,12 @@ Raw output:
 
     def handle_double_click(self, event):
         """Handles double-click events for node explosion."""
-        print(f"DEBUG: Handling double click...") # Re-enable print
+        #print(f"DEBUG: Handling double click...") # Re-enable print
         node_to_explode = self.find_node_at_pos(event.x, event.y)
         if node_to_explode:
-            print(f"DEBUG: Attempting to explode node: {node_to_explode}") # Re-enable print
+           # print(f"DEBUG: Attempting to explode node: {node_to_explode}") # Re-enable print
             self.explode_module(node_to_explode)
-        else:
-            print(f"DEBUG: No node found at double-click position.") # Add else print
+        
 
     def explode_module(self, node_id):
         """Expands a package/directory node to show its immediate children,
@@ -875,7 +874,7 @@ Raw output:
 
         if not is_directory_like:
              # This node might represent a single module/script already
-             print(f"Node '{node_id}' does not appear to be a directory: {potential_dir}. Assuming it's already exploded.")
+             #print(f"Node '{node_id}' does not appear to be a directory: {potential_dir}. Assuming it's already exploded.")
              messagebox.showinfo("Cannot Explode", f"Node '{node_id}' does not seem to be a package or directory that can be exploded further.")
              return
 
@@ -918,11 +917,11 @@ Raw output:
              return
 
         if not children_details:
-            print(f"No children (sub-packages or modules/scripts) found for {node_id}")
+            #print(f"No children (sub-packages or modules/scripts) found for {node_id}")
             messagebox.showinfo("No Children", f"No sub-packages or modules/scripts found within '{node_id}' to explode.")
             return
 
-        print(f"Found {len(children_details)} direct children for {node_id}: {list(children_details.keys())}")
+        #print(f"Found {len(children_details)} direct children for {node_id}: {list(children_details.keys())}")
 
         # --- 2. Modify Graph ---
         self._save_history() # Save state *before* modification
@@ -934,8 +933,7 @@ Raw output:
         original_pos = new_positions.pop(node_id, None)
         if new_graph.has_node(node_id):
              new_graph.remove_node(node_id)
-        else:
-             print(f"Warning: Node {node_id} to explode was already removed?")
+       
 
 
         # Add new nodes for children & estimate initial positions
@@ -950,12 +948,7 @@ Raw output:
                       new_positions[child_id] = (original_pos[0] + offset_x, original_pos[1] + offset_y)
                  else:
                       new_positions[child_id] = (0.5, 0.5) # Fallback position
-             else:
-                 print(f"Warning: Child node {child_id} already exists in graph?")
-
-        # --- DEBUG: Print graph nodes before edge rebuild ---
-        print(f"DEBUG: Nodes in graph before edge rebuild: {sorted(list(new_graph.nodes()))}")
-        # --- END DEBUG ---
+             
 
         # --- 3. Rebuild Edges based on tach_data ---
         print("Rebuilding edges based on tach_data...")
@@ -980,7 +973,7 @@ Raw output:
                         edge = (source_node, target_node)
                         if edge not in added_edges:
                              # --- DEBUG START ---
-                             print(f"DEBUG: Adding Edge | {mapped_edge_info} | Result: {source_node} -> {target_node}")
+                             #print(f"DEBUG: Adding Edge | {mapped_edge_info} | Result: {source_node} -> {target_node}")
                              # --- DEBUG END ---
                              new_graph.add_edge(source_node, target_node)
                              added_edges.add(edge)
@@ -1001,25 +994,25 @@ Raw output:
         # (Layout logic remains similar, using new_positions as initial state)
         if self.graph.number_of_nodes() > 1:
             try:
-                print("Adjusting layout after explosion...")
+                #print("Adjusting layout after explosion...")
                 current_positions_for_layout = {n: p for n, p in new_positions.items() if n in self.graph}
 
                 if PYGRAPHVIZ_INSTALLED:
                      # If using graphviz, maybe just recalculate dot?
                      # Or does spring layout work better after explosion? Let's stick to spring for consistency post-explosion.
-                     print("Using spring_layout for post-explosion adjustment (PyGraphviz available but spring preferred here)")
+                     #print("Using spring_layout for post-explosion adjustment (PyGraphviz available but spring preferred here)")
                      if SCIPY_INSTALLED:
                          k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
                          self.node_positions = nx.spring_layout(self.graph, pos=current_positions_for_layout, k=k, iterations=30, seed=42)
                      else:
-                         print("Falling back to circular layout post-explosion (scipy not available)")
+                         #print("Falling back to circular layout post-explosion (scipy not available)")
                          self.node_positions = nx.circular_layout(self.graph) # Less ideal adjustment
 
                 elif SCIPY_INSTALLED:
                     k = 0.8 / (self.graph.number_of_nodes()**0.5) # Heuristic for k
                     self.node_positions = nx.spring_layout(self.graph, pos=current_positions_for_layout, k=k, iterations=30, seed=42)
                 else:
-                    print("Using circular_layout for post-explosion adjustment (scipy not available)")
+                    #print("Using circular_layout for post-explosion adjustment (scipy not available)")
                     # Simple circular layout if no better option
                     self.node_positions = nx.circular_layout(self.graph)
 
@@ -1036,7 +1029,7 @@ Raw output:
         self.selected_node = None # Clear selection after explosion
         self.undo_button.configure(state="normal")
 
-        print(f"Exploded {node_id}. New graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
+        #print(f"Exploded {node_id}. New graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
         self.draw_graph() # Redraw with updated graph and adjusted positions
 
     def delete_node(self, node_id):
@@ -1063,7 +1056,7 @@ Raw output:
         # Ensure undo button is enabled (it should be after _save_history)
         self.undo_button.configure(state="normal") 
         
-        print(f"Deleted {node_id}. New graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
+        #print(f"Deleted {node_id}. New graph: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges")
         self.draw_graph() # Redraw without the node
 
     def undo_last_action(self, event=None):
@@ -1335,22 +1328,22 @@ Raw output:
             parts = potential_node.split('.') # Use dot-separated name now
             if parts and parts[0]:
                  external_node_candidate = f"ext:{parts[0]}"
-                 print(f"  Potential Node (External Check on '{potential_node}'): {external_node_candidate}")
+                 #print(f"  Potential Node (External Check on '{potential_node}'): {external_node_candidate}")
                  if graph.has_node(external_node_candidate):
-                      print(f"  FOUND (External): {external_node_candidate}")
+                      #print(f"  FOUND (External): {external_node_candidate}")
                       return external_node_candidate
-                 print(f"  NOT FOUND (External): {external_node_candidate}")
+                 #print(f"  NOT FOUND (External): {external_node_candidate}")
                  return None
             else:
-                 print(f"  Cannot determine external package from: {potential_node}")
+                 #print(f"  Cannot determine external package from: {potential_node}")
                  return None
 
         # --- Internal Node Check ---
-        print(f"  Potential Node (Internal): {potential_node}")
+        #print(f"  Potential Node (Internal): {potential_node}")
 
         # 2. Check if the exact potential node name exists in the graph
         if graph.has_node(potential_node):
-            print(f"  FOUND (Exact Internal): {potential_node}")
+            #print(f"  FOUND (Exact Internal): {potential_node}")
             return potential_node
 
         # 3. If exact match not found, try finding the parent package/directory node
@@ -1358,11 +1351,11 @@ Raw output:
         for i in range(len(parts) - 1, 0, -1):
              parent_node_name = '.'.join(parts[:i])
              # --- DEBUG START ---
-             print(f"    Checking parent: {parent_node_name}") # Ensure this is uncommented
+             #print(f"    Checking parent: {parent_node_name}") # Ensure this is uncommented
              # --- DEBUG END ---
              if graph.has_node(parent_node_name):
                  # --- DEBUG START ---
-                 print(f"    FOUND (Parent Match): {parent_node_name}") # Ensure this is uncommented
+                 #print(f"    FOUND (Parent Match): {parent_node_name}") # Ensure this is uncommented
                  # --- DEBUG END ---
                  return parent_node_name
 
@@ -1372,14 +1365,7 @@ Raw output:
         # --- DEBUG END ---
         if graph.has_node('.'):
             if '/' not in normalized_path and '\\\\' not in normalized_path:
-                   # --- DEBUG START ---
-                   print(f"    FOUND (Root Match): '.'") # Ensure this is uncommented
-                   # --- DEBUG END ---
                    return '.'
-
-        # --- DEBUG START ---
-        print(f"  Mapping FAILED for '{filepath}'. Returning None.") # Ensure this is uncommented
-        # --- DEBUG END ---
         return None
 
     # --- Add the on_closing method ---
